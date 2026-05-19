@@ -1,0 +1,349 @@
+{
+  "title": "RouteIQ — Agent Overview",
+  "uid": "routeiq-agent-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["routeiq"],
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "agent_id",
+        "label": "Agent",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "query": "SELECT DISTINCT ServiceName FROM otel_traces WHERE SpanName = 'agent.session' ORDER BY ServiceName",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {},
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "time_window",
+        "label": "Window",
+        "type": "custom",
+        "options": [
+          { "text": "1h",  "value": "1 HOUR",  "selected": false },
+          { "text": "6h",  "value": "6 HOUR",  "selected": false },
+          { "text": "24h", "value": "24 HOUR", "selected": true  },
+          { "text": "7d",  "value": "7 DAY",   "selected": false }
+        ],
+        "current": { "text": "24h", "value": "24 HOUR" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Executive Summary",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Reliability Score",
+      "description": "Score = 100 minus penalties: tool failure (-15), retry storm (-10), loop (-25), guardrail (-20), timeout (-30). Clamped 0–100.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT greatest(0, 100 - if(countIf(SpanName='tool.call' AND (SpanAttributes['routeiq.tool.success']='false' OR SpanAttributes['claude_code.tool.success']='false')) / nullIf(countIf(SpanName='tool.call'),0) > 0.1, 15, 0) - if(max(toInt32OrZero(SpanAttributes['routeiq.tool.retry_count'])) > 5, 10, 0) - if(countIf(SpanName='tool.call' AND (SpanAttributes['routeiq.loop.detected']='true' OR SpanAttributes['claude_code.tool.loop_detected']='true')) > 0, 25, 0) - if(countIf(SpanName='guardrail.check' AND SpanAttributes['routeiq.guardrail.triggered']='true') > 0, 20, 0) - if(max(if(SpanName='agent.session', Duration/1000000, 0)) > 30000, 30, 0)) AS score FROM otel_traces WHERE match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window}",
+          "format": 1
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 60   },
+              { "color": "green",  "value": 80   }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Sessions (window)",
+      "gridPos": { "h": 5, "w": 3, "x": 6, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT count() AS sessions FROM otel_traces WHERE SpanName = 'agent.session' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window}",
+          "format": 1
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Avg Cost / Session (USD)",
+      "gridPos": { "h": 5, "w": 3, "x": 9, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT avg(session_cost) AS avg_cost FROM (SELECT SpanAttributes['routeiq.session.id'] AS sid, sum(toFloat64OrZero(SpanAttributes['routeiq.cost.usd'])) AS session_cost FROM otel_traces WHERE SpanName = 'llm.call' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window} GROUP BY sid)",
+          "format": 1
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Tool Failure Rate",
+      "gridPos": { "h": 5, "w": 3, "x": 12, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT countIf(SpanAttributes['routeiq.tool.success']='false' OR SpanAttributes['claude_code.tool.success']='false') / nullIf(count(),0) AS failure_rate FROM otel_traces WHERE SpanName = 'tool.call' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window}",
+          "format": 1
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.1  },
+              { "color": "red",    "value": 0.25 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Loop Rate",
+      "gridPos": { "h": 5, "w": 3, "x": 15, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT countIf(SpanAttributes['routeiq.loop.detected']='true' OR SpanAttributes['claude_code.tool.loop_detected']='true') / nullIf(count(),0) AS loop_rate FROM otel_traces WHERE SpanName = 'tool.call' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window}",
+          "format": 1
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red",    "value": 0.15 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Guardrail Rate",
+      "gridPos": { "h": 5, "w": 3, "x": 18, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT countIf(SpanAttributes['routeiq.guardrail.triggered']='true') / nullIf(count(),0) AS guardrail_rate FROM otel_traces WHERE SpanName = 'guardrail.check' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window}",
+          "format": 1
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.1  },
+              { "color": "red",    "value": 0.3  }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Engineering Metrics (Time Series)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "p95 Session Latency (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT toStartOfHour(Timestamp) AS time, quantile(0.95)(Duration / 1000000) AS p95_latency_ms FROM otel_traces WHERE SpanName = 'agent.session' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window} GROUP BY time ORDER BY time",
+          "format": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Avg Cost / Session (USD)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT t AS time, avg(session_cost) AS avg_cost_usd FROM (SELECT toStartOfHour(Timestamp) AS t, SpanAttributes['routeiq.session.id'] AS sid, sum(toFloat64OrZero(SpanAttributes['routeiq.cost.usd'])) AS session_cost FROM otel_traces WHERE SpanName = 'llm.call' AND match(ServiceName, '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${time_window} GROUP BY t, sid) GROUP BY t AS time ORDER BY time",
+          "format": 0
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 5,
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Drift Detection (Last 10 Sessions vs Prior 10)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Session Drift — Last 10 vs Prior 10",
+      "description": "Compares avg metrics over the last 10 sessions vs the 10 sessions before that. Delta >20% flagged.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "WITH ranked AS (SELECT COALESCE(NULLIF(SpanAttributes['claude_code.session.id'],''), NULLIF(SpanAttributes['routeiq.session.id'],'')) AS sid, min(Timestamp) AS session_start, max(if(SpanName='agent.session', Duration/1000000, 0)) AS duration_ms, sum(toFloat64OrZero(SpanAttributes['routeiq.cost.usd'])) AS cost, countIf(SpanName='tool.call' AND (SpanAttributes['routeiq.tool.success']='false' OR SpanAttributes['claude_code.tool.success']='false')) / nullIf(countIf(SpanName='tool.call'),0) AS tool_failure_rate, countIf(SpanName='tool.call' AND (SpanAttributes['routeiq.loop.detected']='true' OR SpanAttributes['claude_code.tool.loop_detected']='true')) AS loops, countIf(SpanName='agent.replan') AS replans FROM otel_traces WHERE match(ServiceName, '${agent_id:regex}') GROUP BY sid HAVING sid != '' ORDER BY session_start DESC LIMIT 20), last10 AS (SELECT avg(duration_ms) AS avg_dur, avg(cost) AS avg_cost, avg(tool_failure_rate) AS avg_tfr, avg(loops) AS avg_loops, avg(replans) AS avg_replans FROM ranked LIMIT 10), prior10 AS (SELECT avg(duration_ms) AS avg_dur, avg(cost) AS avg_cost, avg(tool_failure_rate) AS avg_tfr, avg(loops) AS avg_loops, avg(replans) AS avg_replans FROM ranked LIMIT 10 OFFSET 10) SELECT round(last10.avg_dur,0) AS last10_latency_ms, round(prior10.avg_dur,0) AS prior10_latency_ms, round((last10.avg_dur - prior10.avg_dur) / nullIf(prior10.avg_dur,0) * 100, 1) AS latency_delta_pct, round(last10.avg_cost,5) AS last10_cost, round(prior10.avg_cost,5) AS prior10_cost, round((last10.avg_cost - prior10.avg_cost) / nullIf(prior10.avg_cost,0) * 100, 1) AS cost_delta_pct, round(last10.avg_tfr,3) AS last10_tool_fail_rate, round(prior10.avg_tfr,3) AS prior10_tool_fail_rate, round(last10.avg_loops,2) AS last10_loops, round(prior10.avg_loops,2) AS prior10_loops, round(last10.avg_replans,2) AS last10_replans, round(prior10.avg_replans,2) AS prior10_replans FROM last10, prior10",
+          "format": 1
+        }
+      ],
+      "options": { "sortBy": [] },
+      "fieldConfig": {
+        "defaults": { "custom": { "displayMode": "auto" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*delta.*" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green",  "value": null },
+                    { "color": "yellow", "value": 20   },
+                    { "color": "red",    "value": 50   }
+                  ]
+                }
+              },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "Agent Summary Table",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 },
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "All Agents — Click to Drill Into Sessions",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 25 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+          "rawSql": "SELECT ServiceName AS agent, count() AS sessions, round(quantile(0.95)(if(SpanName='agent.session', Duration/1000000, null)),0) AS p95_latency_ms, round(avg(cost),5) AS avg_cost_usd, round(countIf(SpanName='tool.call' AND (SpanAttributes['routeiq.tool.success']='false' OR SpanAttributes['claude_code.tool.success']='false')) / nullIf(countIf(SpanName='tool.call'),0),3) AS tool_failure_rate, round(countIf(SpanName='tool.call' AND (SpanAttributes['routeiq.loop.detected']='true' OR SpanAttributes['claude_code.tool.loop_detected']='true')) / nullIf(countIf(SpanName='tool.call'),0),3) AS loop_rate, round(countIf(SpanName='guardrail.check' AND SpanAttributes['routeiq.guardrail.triggered']='true') / nullIf(countIf(SpanName='guardrail.check'),0),3) AS guardrail_rate FROM (SELECT *, sum(toFloat64OrZero(SpanAttributes['routeiq.cost.usd'])) OVER (PARTITION BY COALESCE(NULLIF(SpanAttributes['claude_code.session.id'],''), SpanAttributes['routeiq.session.id'])) AS cost FROM otel_traces WHERE Timestamp >= now() - INTERVAL ${time_window}) GROUP BY agent ORDER BY sessions DESC",
+          "format": 1
+        }
+      ],
+      "options": { "sortBy": [{ "desc": true, "displayName": "sessions" }] },
+      "links": [],
+      "fieldConfig": {
+        "defaults": { "custom": { "displayMode": "auto" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "agent" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View sessions →",
+                    "url": "/d/routeiq-session-drilldown?var-agent_id=${__data.fields.agent}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

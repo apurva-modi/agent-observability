@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: RouteIQ Dashboards
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: /opt/homebrew/share/grafana/conf/provisioning/dashboards/routeiq
+      foldersFromFilesStructure: false

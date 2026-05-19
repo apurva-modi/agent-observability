@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: RouteIQ ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: routeiq-clickhouse
+    isDefault: true
+    jsonData:
+      host: ${CLICKHOUSE_HOST}
+      port: ${CLICKHOUSE_PORT}
+      username: ${CLICKHOUSE_USER}
+      defaultDatabase: ${CLICKHOUSE_DATABASE}
+      tlsSkipVerify: false
+      protocol: http
+      secure: true
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD}
+    editable: true
