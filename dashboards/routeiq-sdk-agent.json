@@ -2,7 +2,7 @@
   "title": "RouteIQ — SDK Agent",
   "uid": "routeiq-sdk-agent",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-24h", "to": "now" },
   "timezone": "browser",
@@ -22,6 +22,19 @@
         "current": {},
         "refresh": 2,
         "sort": 1
+      },
+      {
+        "name": "session_id",
+        "label": "Session",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "query": "SELECT DISTINCT SpanAttributes['routeiq.session.id'] AS session_id FROM otel_traces WHERE SpanAttributes['routeiq.session.id'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} ORDER BY session_id DESC",
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {},
+        "refresh": 2,
+        "sort": 0
       },
       {
         "name": "window",
@@ -54,7 +67,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT count() AS tasks FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
+        "rawSql": "SELECT count() AS tasks FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
         "format": 1
       }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
@@ -69,7 +82,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT countIf(SpanAttributes['routeiq.task.completion_status'] = '1') / nullIf(count(), 0) AS success_rate FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
+        "rawSql": "SELECT countIf(SpanAttributes['routeiq.task.completion_status'] = '1') / nullIf(count(), 0) AS success_rate FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
         "format": 1
       }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
@@ -96,7 +109,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT round(avg(toFloat64OrZero(SpanAttributes['routeiq.task.total_tokens'])), 0) AS avg_tokens FROM otel_traces WHERE SpanName LIKE 'task:%' AND SpanAttributes['routeiq.task.total_tokens'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
+        "rawSql": "SELECT round(avg(toFloat64OrZero(SpanAttributes['routeiq.task.total_tokens'])), 0) AS avg_tokens FROM otel_traces WHERE SpanName LIKE 'task:%' AND SpanAttributes['routeiq.task.total_tokens'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
         "format": 1
       }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
@@ -111,7 +124,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT countIf(SpanAttributes['routeiq.tool.result_status'] != '' AND SpanAttributes['routeiq.tool.result_status'] != '1') / nullIf(countIf(SpanAttributes['routeiq.tool.result_status'] != ''), 0) AS error_rate FROM otel_traces WHERE SpanName LIKE 'tool:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
+        "rawSql": "SELECT countIf(SpanAttributes['routeiq.tool.result_status'] != '' AND SpanAttributes['routeiq.tool.result_status'] != '1') / nullIf(countIf(SpanAttributes['routeiq.tool.result_status'] != ''), 0) AS error_rate FROM otel_traces WHERE SpanName LIKE 'tool:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
         "format": 1
       }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
@@ -138,7 +151,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT round(avg(steps), 1) AS avg_steps FROM (SELECT SpanAttributes['routeiq.task.id'] AS task_id, count() AS steps FROM otel_traces WHERE SpanName LIKE 'step:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY task_id)",
+        "rawSql": "SELECT round(avg(steps), 1) AS avg_steps FROM (SELECT SpanAttributes['routeiq.task.id'] AS task_id, count() AS steps FROM otel_traces WHERE SpanName LIKE 'step:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY task_id)",
         "format": 1
       }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
@@ -147,17 +160,17 @@
     {
       "id": 7,
       "type": "stat",
-      "title": "Avg Tool Latency (ms)",
+      "title": "Unique Sessions",
       "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT round(avg(toFloat64OrZero(SpanAttributes['routeiq.tool.latency_ms'])), 1) AS avg_latency_ms FROM otel_traces WHERE SpanName LIKE 'tool:%' AND SpanAttributes['routeiq.tool.latency_ms'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
+        "rawSql": "SELECT uniqExact(SpanAttributes['routeiq.session.id']) AS sessions FROM otel_traces WHERE SpanName LIKE 'task:%' AND SpanAttributes['routeiq.session.id'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window}",
         "format": 1
       }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-      "fieldConfig": { "defaults": { "unit": "ms" } }
+      "fieldConfig": { "defaults": { "unit": "short" } }
     },
     {
       "id": 10,
@@ -175,7 +188,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT toStartOfMinute(Timestamp) AS time, round(quantile(0.95)(Duration / 1e6), 0) AS p95_ms FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY time ORDER BY time",
+        "rawSql": "SELECT toStartOfMinute(Timestamp) AS time, round(quantile(0.95)(Duration / 1e6), 0) AS p95_ms FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY time ORDER BY time",
         "format": 0
       }],
       "fieldConfig": {
@@ -195,7 +208,7 @@
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT toStartOfMinute(Timestamp) AS time, SpanAttributes['routeiq.tool.name'] AS tool, count() AS calls FROM otel_traces WHERE SpanName LIKE 'tool:%' AND SpanAttributes['routeiq.tool.name'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY time, tool ORDER BY time",
+        "rawSql": "SELECT toStartOfMinute(Timestamp) AS time, SpanAttributes['routeiq.tool.name'] AS tool, count() AS calls FROM otel_traces WHERE SpanName LIKE 'tool:%' AND SpanAttributes['routeiq.tool.name'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY time, tool ORDER BY time",
         "format": 0
       }],
       "fieldConfig": {
@@ -209,20 +222,65 @@
     {
       "id": 20,
       "type": "row",
-      "title": "Recent Activity",
+      "title": "Sessions",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "collapsed": false
+    },
+    {
+      "id": 23,
+      "type": "table",
+      "title": "Sessions",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT SpanAttributes['routeiq.session.id'] AS session_id, SpanAttributes['routeiq.agent.id'] AS agent, SpanAttributes['routeiq.version.model.name'] AS model, count() AS tasks, sum(toInt64OrZero(SpanAttributes['routeiq.task.total_tokens'])) AS total_tokens, round(countIf(SpanAttributes['routeiq.task.completion_status'] = '1') / nullIf(count(), 0) * 100, 0) AS success_pct, toDateTime(min(Timestamp)) AS started FROM otel_traces WHERE SpanName LIKE 'task:%' AND SpanAttributes['routeiq.session.id'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} GROUP BY session_id, agent, model ORDER BY started DESC LIMIT 100",
+        "format": 1
+      }],
+      "options": { "sortBy": [{ "desc": true, "displayName": "started" }] },
+      "fieldConfig": {
+        "defaults": { "custom": { "displayMode": "auto" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "success_pct" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "custom.displayMode", "value": "color-background" },
+              { "id": "thresholds", "value": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red",    "value": null },
+                  { "color": "yellow", "value": 70   },
+                  { "color": "green",  "value": 90   }
+                ]
+              }}
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "total_tokens" },
+            "properties": [{ "id": "unit", "value": "short" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Recent Activity",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "collapsed": false
     },
     {
       "id": 21,
       "type": "table",
       "title": "Recent Tasks",
-      "gridPos": { "h": 10, "w": 14, "x": 0, "y": 15 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT toDateTime(Timestamp) AS time, SpanAttributes['routeiq.task.input_intent'] AS intent, SpanAttributes['routeiq.agent.id'] AS agent, if(SpanAttributes['routeiq.task.completion_status'] = '1', 'SUCCESS', 'FAILED') AS status, toInt64OrZero(SpanAttributes['routeiq.task.total_tokens']) AS tokens, round(Duration / 1e6, 0) AS duration_ms FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} ORDER BY time DESC LIMIT 50",
+        "rawSql": "SELECT toDateTime(Timestamp) AS time, SpanAttributes['routeiq.session.id'] AS session_id, SpanAttributes['routeiq.agent.id'] AS agent, SpanAttributes['routeiq.task.input_intent'] AS intent, if(SpanAttributes['routeiq.task.completion_status'] = '1', 'SUCCESS', 'FAILED') AS status, toInt64OrZero(SpanAttributes['routeiq.task.total_tokens']) AS tokens, round(Duration / 1e6, 0) AS duration_ms FROM otel_traces WHERE SpanName LIKE 'task:%' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window} ORDER BY time DESC LIMIT 100",
         "format": 1
       }],
       "options": { "sortBy": [{ "desc": true, "displayName": "time" }] },
@@ -244,6 +302,10 @@
           {
             "matcher": { "id": "byName", "options": "duration_ms" },
             "properties": [{ "id": "unit", "value": "ms" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "session_id" },
+            "properties": [{ "id": "custom.width", "value": 300 }]
           }
         ]
       }
@@ -252,12 +314,12 @@
       "id": 22,
       "type": "table",
       "title": "Tool Call Log",
-      "gridPos": { "h": 10, "w": 10, "x": 14, "y": 15 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 34 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
       "targets": [{
         "refId": "A",
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
-        "rawSql": "SELECT toDateTime(Timestamp) AS time, SpanAttributes['routeiq.tool.name'] AS tool, if(SpanAttributes['routeiq.tool.result_status'] = '1', 'OK', 'ERROR') AS status, round(toFloat64OrZero(SpanAttributes['routeiq.tool.latency_ms']), 1) AS latency_ms FROM otel_traces WHERE SpanName LIKE 'tool:%' AND SpanAttributes['routeiq.tool.name'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND Timestamp >= now() - INTERVAL ${window} ORDER BY time DESC LIMIT 100",
+        "rawSql": "SELECT toDateTime(Timestamp) AS time, SpanAttributes['routeiq.session.id'] AS session_id, SpanAttributes['routeiq.tool.name'] AS tool, if(SpanAttributes['routeiq.tool.result_status'] = '1', 'OK', 'ERROR') AS status, round(toFloat64OrZero(SpanAttributes['routeiq.tool.latency_ms']), 1) AS latency_ms FROM otel_traces WHERE SpanName LIKE 'tool:%' AND SpanAttributes['routeiq.tool.name'] != '' AND match(SpanAttributes['routeiq.agent.id'], '${agent_id:regex}') AND match(SpanAttributes['routeiq.session.id'], '${session_id:regex}') AND Timestamp >= now() - INTERVAL ${window} ORDER BY time DESC LIMIT 200",
         "format": 1
       }],
       "options": { "sortBy": [{ "desc": true, "displayName": "time" }] },
@@ -279,6 +341,10 @@
           {
             "matcher": { "id": "byName", "options": "latency_ms" },
             "properties": [{ "id": "unit", "value": "ms" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "session_id" },
+            "properties": [{ "id": "custom.width", "value": 300 }]
           }
         ]
       }
