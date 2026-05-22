@@ -6,13 +6,13 @@ datasources:
     uid: routeiq-clickhouse
     isDefault: true
     jsonData:
-      host: ${CLICKHOUSE_HOST}
-      port: ${CLICKHOUSE_PORT}
-      username: ${CLICKHOUSE_USER}
-      defaultDatabase: ${CLICKHOUSE_DATABASE}
-      tlsSkipVerify: false
+      host: localhost
+      port: 8123
+      username: default
+      defaultDatabase: default
       protocol: http
-      secure: true
+      secure: false
+      tlsSkipVerify: false
     secureJsonData:
-      password: ${CLICKHOUSE_PASSWORD}
+      password: ""
     editable: true
