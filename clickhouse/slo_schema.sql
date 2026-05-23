@@ -61,16 +61,15 @@ SELECT
 
     count()                                                               AS total_tasks,
 
-    -- RouteIQ SDK uses completion_status '1'=success; others use StatusCode
+    -- success: RouteIQ SDK → completion_status='1'; Claude Code → session existing = success;
+    --          Strands/LangChain → StatusCode != ERROR
     countIf(if(
-        SpanName LIKE 'task:%',
-        SpanAttributes['routeiq.task.completion_status'] = '1',
-        StatusCode != 'STATUS_CODE_ERROR'
+        SpanName LIKE 'task:%',     SpanAttributes['routeiq.task.completion_status'] = '1',
+        if(SpanName = 'session:summary', true, StatusCode != 'STATUS_CODE_ERROR')
     ))                                                                    AS success_count,
     countIf(if(
-        SpanName LIKE 'task:%',
-        SpanAttributes['routeiq.task.completion_status'] != '1',
-        StatusCode  = 'STATUS_CODE_ERROR'
+        SpanName LIKE 'task:%',     SpanAttributes['routeiq.task.completion_status'] = '2',
+        if(SpanName = 'session:summary', false, StatusCode  = 'STATUS_CODE_ERROR')
     ))                                                                    AS failure_count,
 
     sum(toFloat64OrDefault(SpanAttributes['session.cost_usd']))          AS total_cost_usd,
@@ -110,14 +109,12 @@ SELECT
     count()                                                               AS total_tasks,
 
     countIf(if(
-        SpanName LIKE 'task:%',
-        SpanAttributes['routeiq.task.completion_status'] = '1',
-        StatusCode != 'STATUS_CODE_ERROR'
+        SpanName LIKE 'task:%',     SpanAttributes['routeiq.task.completion_status'] = '1',
+        if(SpanName = 'session:summary', true, StatusCode != 'STATUS_CODE_ERROR')
     ))                                                                    AS success_count,
     countIf(if(
-        SpanName LIKE 'task:%',
-        SpanAttributes['routeiq.task.completion_status'] != '1',
-        StatusCode  = 'STATUS_CODE_ERROR'
+        SpanName LIKE 'task:%',     SpanAttributes['routeiq.task.completion_status'] = '2',
+        if(SpanName = 'session:summary', false, StatusCode  = 'STATUS_CODE_ERROR')
     ))                                                                    AS failure_count,
 
     sum(toFloat64OrDefault(SpanAttributes['session.cost_usd']))          AS total_cost_usd,
