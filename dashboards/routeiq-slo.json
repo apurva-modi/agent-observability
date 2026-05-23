@@ -1,0 +1,264 @@
+{
+  "title": "RouteIQ — SLO Monitor",
+  "uid": "routeiq-slo",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["routeiq", "slo"],
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "window",
+        "label": "Window",
+        "type": "custom",
+        "options": [
+          { "text": "1h",  "value": "1 HOUR",  "selected": false },
+          { "text": "6h",  "value": "6 HOUR",  "selected": false },
+          { "text": "24h", "value": "24 HOUR", "selected": true  },
+          { "text": "7d",  "value": "7 DAY",   "selected": false },
+          { "text": "30d", "value": "30 DAY",  "selected": false }
+        ],
+        "current": { "text": "24h", "value": "24 HOUR" }
+      }
+    ]
+  },
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "SLO Scorecard",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+
+    {
+      "id": 2,
+      "type": "table",
+      "title": "SLO Status — all agents",
+      "description": "Thresholds: success_rate ≥ 95 % | p95_latency ≤ 30 s | avg_cost ≤ $1.00 | escalation ≤ 20 %",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT agent_id, sum(total_tasks) AS tasks, round(100.0 * sum(success_count) / sum(total_tasks), 1) AS success_rate_pct, if(sum(success_count) / sum(total_tasks) >= 0.95, 1, 0) AS slo_success_ok, round(quantileMerge(0.95)(latency_state), 2) AS p95_latency_s, if(quantileMerge(0.95)(latency_state) <= 30, 1, 0) AS slo_latency_ok, round(if(sum(total_tasks) > 0, sum(total_cost_usd) / sum(total_tasks), 0), 4) AS avg_cost_usd, if(sum(total_cost_usd) / sum(total_tasks) <= 1.0, 1, 0) AS slo_cost_ok, round(100.0 * sum(heavily_escalated) / sum(total_tasks), 1) AS escalation_rate_pct, if(sum(heavily_escalated) / sum(total_tasks) <= 0.2, 1, 0) AS slo_escalation_ok FROM routeiq_slo_hourly FINAL WHERE window_start >= now() - INTERVAL ${window} GROUP BY agent_id ORDER BY tasks DESC",
+        "format": 1
+      }],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "success_rate_pct" },
+            "properties": [
+              { "id": "displayName", "value": "Success %" },
+              { "id": "unit", "value": "percent" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 85 }, { "color": "green", "value": 95 }] } },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p95_latency_s" },
+            "properties": [
+              { "id": "displayName", "value": "p95 Latency (s)" },
+              { "id": "unit", "value": "s" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 20 }, { "color": "red", "value": 30 }] } },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "avg_cost_usd" },
+            "properties": [
+              { "id": "displayName", "value": "Avg Cost ($)" },
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.75 }, { "color": "red", "value": 1.0 }] } },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "escalation_rate_pct" },
+            "properties": [
+              { "id": "displayName", "value": "Escalation %" },
+              { "id": "unit", "value": "percent" },
+              { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 20 }] } },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          },
+          { "matcher": { "id": "byName", "options": "slo_success_ok"    }, "properties": [{ "id": "custom.hidden", "value": true }] },
+          { "matcher": { "id": "byName", "options": "slo_latency_ok"    }, "properties": [{ "id": "custom.hidden", "value": true }] },
+          { "matcher": { "id": "byName", "options": "slo_cost_ok"       }, "properties": [{ "id": "custom.hidden", "value": true }] },
+          { "matcher": { "id": "byName", "options": "slo_escalation_ok" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+        ]
+      },
+      "options": { "sortBy": [{ "displayName": "tasks", "desc": true }] }
+    },
+
+    {
+      "id": 10,
+      "type": "row",
+      "title": "Success Rate",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false
+    },
+
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Task Success Rate % — per agent",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT window_start AS time, agent_id, round(100.0 * sum(success_count) / sum(total_tasks), 2) AS success_rate_pct FROM routeiq_slo_hourly FINAL WHERE $__timeFilter(window_start) GROUP BY time, agent_id ORDER BY time",
+        "format": 0
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0, "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 85 }, { "color": "green", "value": 95 }] },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Latency",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": false
+    },
+
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "P95 Task Latency (s) — per agent  [SLO: ≤ 30 s]",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT window_start AS time, agent_id, round(quantileMerge(0.95)(latency_state), 2) AS p95_latency_s FROM routeiq_slo_hourly FINAL WHERE $__timeFilter(window_start) GROUP BY time, agent_id ORDER BY time",
+        "format": 0
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 20 }, { "color": "red", "value": 30 }] },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Cost",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "collapsed": false
+    },
+
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Avg Cost per Task ($) — per agent  [SLO: ≤ $1.00]",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT window_start AS time, agent_id, round(if(sum(total_tasks) > 0, sum(total_cost_usd) / sum(total_tasks), 0), 4) AS avg_cost_usd FROM routeiq_slo_hourly FINAL WHERE $__timeFilter(window_start) GROUP BY time, agent_id ORDER BY time",
+        "format": 0
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.75 }, { "color": "red", "value": 1.0 }] },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+    },
+
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Total Cost ($) — per hour",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 26 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT window_start AS time, agent_id, round(sum(total_cost_usd), 4) AS total_cost_usd FROM routeiq_slo_hourly FINAL WHERE $__timeFilter(window_start) GROUP BY time, agent_id ORDER BY time",
+        "format": 0
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+    },
+
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Escalation",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+      "collapsed": false
+    },
+
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Escalation Rate % (tasks with >3 human turns)  [SLO: ≤ 20 %]",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 34 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT window_start AS time, agent_id, round(100.0 * sum(heavily_escalated) / sum(total_tasks), 2) AS escalation_rate_pct FROM routeiq_slo_hourly FINAL WHERE $__timeFilter(window_start) GROUP BY time, agent_id ORDER BY time",
+        "format": 0
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0, "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 20 }] },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+    },
+
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Avg Human Turns per Task — per agent",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 34 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+      "targets": [{
+        "refId": "A",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "routeiq-clickhouse" },
+        "rawSql": "SELECT window_start AS time, agent_id, round(if(sum(total_tasks) > 0, sum(total_human_turns) / sum(total_tasks), 0), 2) AS avg_human_turns FROM routeiq_slo_hourly FINAL WHERE $__timeFilter(window_start) GROUP BY time, agent_id ORDER BY time",
+        "format": 0
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "spanNulls": true }
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+    }
+
+  ]
+}
