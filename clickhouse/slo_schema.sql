@@ -40,27 +40,45 @@ ORDER BY (window_start, agent_id);
 
 
 -- ── 2. Materialized view — populates automatically on every otel_traces INSERT ─
+--
+-- Covers all frameworks:
+--   RouteIQ SDK  → SpanName LIKE 'task:%' AND ParentSpanId = ''
+--                  success: routeiq.task.completion_status = '1'
+--   Claude Code  → SpanName = 'session:summary'
+--   Strands      → SpanName = 'invoke_agent Strands Agents' AND ParentSpanId = ''
+--   LangChain    → SpanName = 'AgentExecutor.workflow'       AND ParentSpanId = ''
 CREATE MATERIALIZED VIEW IF NOT EXISTS routeiq_slo_hourly_mv
 TO routeiq_slo_hourly
 AS
 SELECT
     toStartOfHour(Timestamp)                                              AS window_start,
     coalesce(
+        nullIf(SpanAttributes['routeiq.agent.id'], ''),
         nullIf(SpanAttributes['agent.id'], ''),
         nullIf(ResourceAttributes['routeiq.agent_id'], ''),
         ServiceName
     )                                                                     AS agent_id,
 
     count()                                                               AS total_tasks,
-    countIf(StatusCode != 'STATUS_CODE_ERROR')                           AS success_count,
-    countIf(StatusCode  = 'STATUS_CODE_ERROR')                           AS failure_count,
+
+    -- RouteIQ SDK uses completion_status '1'=success; others use StatusCode
+    countIf(if(
+        SpanName LIKE 'task:%',
+        SpanAttributes['routeiq.task.completion_status'] = '1',
+        StatusCode != 'STATUS_CODE_ERROR'
+    ))                                                                    AS success_count,
+    countIf(if(
+        SpanName LIKE 'task:%',
+        SpanAttributes['routeiq.task.completion_status'] != '1',
+        StatusCode  = 'STATUS_CODE_ERROR'
+    ))                                                                    AS failure_count,
 
     sum(toFloat64OrDefault(SpanAttributes['session.cost_usd']))          AS total_cost_usd,
 
     sum(toInt64OrDefault(SpanAttributes['session.human_turns']))         AS total_human_turns,
     countIf(toInt64OrDefault(SpanAttributes['session.human_turns']) > 3) AS heavily_escalated,
 
-    -- latency: prefer session.duration_s for Claude Code; fall back to span Duration
+    -- latency: Claude Code uses session.duration_s; all others use Duration
     quantileState(0.95)(if(
         SpanName = 'session:summary',
         toFloat64OrDefault(SpanAttributes['session.duration_s']),
@@ -71,9 +89,10 @@ SELECT
 
 FROM otel_traces
 WHERE
-    SpanName = 'session:summary'                                          -- Claude Code
-    OR (SpanName = 'invoke_agent Strands Agents' AND ParentSpanId = '')  -- Strands
-    OR (SpanName = 'AgentExecutor.workflow'       AND ParentSpanId = '')  -- LangChain
+    (SpanName LIKE 'task:%'    AND ParentSpanId = '')
+    OR SpanName = 'session:summary'
+    OR (SpanName = 'invoke_agent Strands Agents' AND ParentSpanId = '')
+    OR (SpanName = 'AgentExecutor.workflow'       AND ParentSpanId = '')
 GROUP BY window_start, agent_id;
 
 
@@ -82,14 +101,24 @@ INSERT INTO routeiq_slo_hourly
 SELECT
     toStartOfHour(Timestamp)                                              AS window_start,
     coalesce(
+        nullIf(SpanAttributes['routeiq.agent.id'], ''),
         nullIf(SpanAttributes['agent.id'], ''),
         nullIf(ResourceAttributes['routeiq.agent_id'], ''),
         ServiceName
     )                                                                     AS agent_id,
 
     count()                                                               AS total_tasks,
-    countIf(StatusCode != 'STATUS_CODE_ERROR')                           AS success_count,
-    countIf(StatusCode  = 'STATUS_CODE_ERROR')                           AS failure_count,
+
+    countIf(if(
+        SpanName LIKE 'task:%',
+        SpanAttributes['routeiq.task.completion_status'] = '1',
+        StatusCode != 'STATUS_CODE_ERROR'
+    ))                                                                    AS success_count,
+    countIf(if(
+        SpanName LIKE 'task:%',
+        SpanAttributes['routeiq.task.completion_status'] != '1',
+        StatusCode  = 'STATUS_CODE_ERROR'
+    ))                                                                    AS failure_count,
 
     sum(toFloat64OrDefault(SpanAttributes['session.cost_usd']))          AS total_cost_usd,
 
@@ -106,7 +135,8 @@ SELECT
 
 FROM otel_traces
 WHERE
-    SpanName = 'session:summary'
+    (SpanName LIKE 'task:%'    AND ParentSpanId = '')
+    OR SpanName = 'session:summary'
     OR (SpanName = 'invoke_agent Strands Agents' AND ParentSpanId = '')
     OR (SpanName = 'AgentExecutor.workflow'       AND ParentSpanId = '')
 GROUP BY window_start, agent_id;

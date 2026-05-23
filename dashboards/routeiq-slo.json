@@ -4,7 +4,7 @@
   "schemaVersion": 39,
   "version": 1,
   "refresh": "1m",
-  "time": { "from": "now-24h", "to": "now" },
+  "time": { "from": "now-7d", "to": "now" },
   "timezone": "browser",
   "tags": ["routeiq", "slo"],
   "graphTooltip": 1,
